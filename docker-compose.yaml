@@ -1,0 +1,115 @@
+version: "3"
+
+services:   
+
+  nginx-proxy: 
+    image: jwilder/nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes: 
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - certs:/etc/nginx/certs:ro
+      - vhostd:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html   
+    labels:
+      - com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: always
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+      - NGINX_DOCKER_GEN_CONTAINER=nginx-proxy
+    volumes:
+      - certs:/etc/nginx/certs:rw
+      - vhostd:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  web:
+    image: web-angular
+    restart: always
+    environment:
+      - VIRTUAL_HOST=web.utopiasoft.duckdns.org
+      - LETSENCRYPT_HOST=web.utopiasoft.duckdns.org
+      - LETSENCRYPT_EMAIL=pablofretes@gmail.com      
+    volumes:
+      - ../mpd-av3/dist:/usr/share/nginx/html
+    depends_on: 
+      - nginx-proxy
+      - letsencrypt
+
+  intranet:
+    image: web-intranet
+    restart: always
+    environment:
+      - VIRTUAL_HOST=intranet.utopiasoft.duckdns.org
+      - LETSENCRYPT_HOST=intranet.utopiasoft.duckdns.org
+      - LETSENCRYPT_EMAIL=pablofretes@gmail.com      
+    volumes:
+      - ../appmodernizacion/dist:/usr/share/nginx/html
+    depends_on: 
+      - nginx-proxy
+      - letsencrypt
+      
+  api:      
+    image: app-backend
+    restart: always
+    environment:
+      - VIRTUAL_HOST=api.utopiasoft.duckdns.org
+      - VIRTUAL_PORT=3000
+      - URL_MAIL=http://intranet.utopiasoft.duckdns.org
+      - DB_HOST=mysql
+      - DATABASE_URL=mysql://pablo:123123@ms/sgmp
+      - LETSENCRYPT_HOST=api.utopiasoft.duckdns.org
+      - LETSENCRYPT_EMAIL=pablofretes@gmail.com    
+    depends_on: 
+      - nginx-proxy
+      - letsencrypt
+
+  ms:
+    image: mysql
+    restart: always
+    ports:
+      - "3310:3306"
+    volumes:
+      - ../bd:/var/lib/mysql
+    environment:      
+      MYSQL_ROOT_PASSWORD: 123123
+      MYSQL_USER: pablo
+      MYSQL_PASSWORD: 123123
+      MYSQL_DATABASE: sgmp 
+
+  app:
+    build: 
+      context: /var/www/html/marcospazdigital-v2/
+      dockerfile: Dockerfile
+    container_name: utopia-app
+    restart: always
+    working_dir: /var/www/
+    volumes:
+      - /var/www/html/marcospazdigital-v2:/var/www
+  
+  nginx-php:
+    image: nginx:1.19-alpine
+    container_name: utopia-nginx
+    restart: always
+    expose: 
+      - "80"   
+    volumes:
+      - /var/www/html/marcospazdigital-v2:/var/www
+      - ./nginx:/etc/nginx/conf.d
+    environment:
+      - VIRTUAL_HOST=php.utopiasoft.duckdns.org
+      - LETSENCRYPT_HOST=php.utopiasoft.duckdns.org
+      - LETSENCRYPT_EMAIL=pablofretes@gmail.com      
+    depends_on: 
+      - nginx-proxy
+      - letsencrypt
+
+volumes: 
+  certs:
+  html:
+  vhostd:
